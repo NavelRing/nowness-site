@@ -169,96 +169,94 @@ def mast(date, depth, stamp=""):
             f'<div class="stamp">{d[2]}.{d[1]}.{d[0]}<span>{ESC(stamp)}</span></div></header>')
 
 
-def media(st, big_ok=True):
+def media(st, in_link=False):
     """Image card if rights-cleared image exists, else blank typographic card."""
     kn = st.get("key_number")
     img = st.get("image")
     if img:
-        bignum = f'<p class="big">{ESC(kn)}</p>' if kn and big_ok else ""
+        bignum = f'<p class="big">{ESC(kn)}</p>' if kn else ""
         credit = ESC(" · ".join(x for x in (img.get("credit"), img.get("license")) if x))
         page = img.get("page")
-        credit_html = f'<a href="{ESC(page)}" rel="noopener">{credit}</a>' if page else credit
+        credit_html = f'<a href="{ESC(page)}" rel="noopener">{credit}</a>' if page and not in_link else credit  # no nested links in cards
         return (f'<figure class="photo"><img src="{ESC(img["url"])}" alt="" loading="lazy">'
                 f'<figcaption class="on">{bignum}<h3>{ESC(st["title"])}</h3></figcaption></figure>'
                 f'<p class="credit">Photo: {credit_html}</p>')
-    bignum = f'<p class="big">{ESC(kn)}</p>' if kn and big_ok else ""
+    bignum = f'<p class="big">{ESC(kn)}</p>' if kn else ""
     return f'<div class="blank">{bignum}<h3>{ESC(st["title"])}</h3></div>'
 
 
-def render_index(issue, total_issues):
-    d = issue["date"]
-    n = sum(len(s["stories"]) for s in issue["sections"])
-    out = [head("now—ness", 0), mast(d, 0, f"{n} 則"),
+SWIPE = ("<script>(()=>{let x,y;addEventListener('touchstart',e=>{x=e.touches[0].clientX;y=e.touches[0].clientY},{passive:true});"
+         "addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-x,dy=e.changedTouches[0].clientY-y;"
+         "if(Math.abs(dx)>80&&Math.abs(dy)<60)location.href=document.querySelector('.mark').href})})()</script>")
+
+
+def numbered(issue):
+    """(section, story, n) with n counted across the whole issue: the story page is <date>/<n>.html."""
+    n = 0
+    for s in issue["sections"]:
+        for st in s["stories"]:
+            n += 1
+            yield s, st, n
+
+
+def render_cards(issue, depth, total_issues):
+    """Cover page: titles and pictures only. depth 0 = site home, 1 = <date>/index.html."""
+    d, up = issue["date"], "../" * depth
+    base = "" if depth else f"{d}/"
+    total = sum(len(s["stories"]) for s in issue["sections"])
+    out = [head("now—ness" if not depth else f"{d} — now—ness", depth), mast(d, depth, f"{total} 則"),
            f'<div class="today"><p class="lbl">Today, in one line</p><h1>{ESC(issue["title"])}</h1>']
     if issue["brief"]:
         out.append(f'<p class="brief">{inline(issue["brief"])}</p>')
     out.append('<nav class="index" aria-label="分區">' + "".join(
         f'<a href="#{slug(s["name"])}">{ESC(s["name"])}<sup>{len(s["stories"])}</sup></a>' for s in issue["sections"]) + "</nav></div>")
-    for s in issue["sections"]:
-        en = SECTION_EN.get(s["name"], "")
-        out.append(f'<section id="{slug(s["name"])}"><div class="sh"><h2>{ESC(en)}<span>{ESC(s["name"])}</span></h2>'
-                   f'<span class="count">{len(s["stories"])} / {n}</span></div>')
-        if s["name"] == "股市新手解讀":
-            out.append('<p class="disc">新聞解讀，不是投資建議。</p>')
-        for i, st in enumerate(s["stories"]):
-            link = f'{d}/index.html#{slug(st["title"])}'
-            if i == 0:
-                out.append(f'<article class="story">{media(st)}<p class="one">{ESC(st["oneliner"] or "")}</p>'
-                           f'<div class="links"><a href="{link}"><u>全文與來源</u></a></div></article>')
-            else:
-                thumb = (f'<img class="thumb" src="{ESC(st["image"]["url"])}" alt="" loading="lazy">' if st.get("image") else "")
-                out.append(f'<a class="short{"" if thumb else " noimg"}" href="{link}">{thumb}<div><h4>{ESC(st["title"])}</h4>'
-                           f'<p>{ESC(st["oneliner"] or "")}</p></div></a>')
-        out.append("</section>")
-    out.append(f'<footer><a class="mark" href="index.html">now<i>—</i>ness</a>'
-               f'<a href="{d}/index.html">本期全文</a> · <a href="archive/index.html">過去 {total_issues} 期</a></footer></div></body></html>')
+    cur = None
+    for s, st, n in numbered(issue):
+        if s is not cur:
+            if cur is not None:
+                out.append("</section>")
+            cur = s
+            out.append(f'<section id="{slug(s["name"])}"><div class="sh"><h2>{ESC(SECTION_EN.get(s["name"], ""))}'
+                       f'<span>{ESC(s["name"])}</span></h2><span class="count">{len(s["stories"])} / {total}</span></div>')
+            if s["name"] == "股市新手解讀":
+                out.append('<p class="disc">新聞解讀，不是投資建議。</p>')
+            out.append(f'<a class="story card" href="{base}{n}.html">{media(st, in_link=True)}</a>')
+            continue
+        thumb = f'<img class="thumb" src="{ESC(st["image"]["url"])}" alt="" loading="lazy">' if st.get("image") else ""
+        out.append(f'<a class="short{"" if thumb else " noimg"}" href="{base}{n}.html">{thumb}<div><h4>{ESC(st["title"])}</h4></div></a>')
+    out.append("</section>")
+    if depth and issue["coverage"]:
+        out.append('<details class="cov"><summary>本期涵蓋與查核</summary>'
+                   + "".join(f"<p>{inline(c)}</p>" for c in issue["coverage"]) + "</details>")
+    out.append(f'<footer><a class="mark" href="{up}index.html">now<i>—</i>ness</a>'
+               f'<a href="{up}archive/index.html">過去 {total_issues} 期</a></footer></div></body></html>')
     return "".join(out)
 
 
-def render_issue(issue, prev_d, next_d):
-    d = issue["date"]
-    out = [head(f'{d} — now—ness', 1), mast(d, 1),
-           f'<div class="today"><p class="lbl">Issue {ESC(d)}</p><h1>{ESC(issue["title"])}</h1>']
-    if issue["brief"]:
-        out.append(f'<p class="brief">{inline(issue["brief"])}</p>')
-    out.append('<nav class="index" aria-label="分區">' + "".join(
-        f'<a href="#{slug(s["name"])}">{ESC(s["name"])}<sup>{len(s["stories"])}</sup></a>' for s in issue["sections"]) + "</nav></div>")
-    for s in issue["sections"]:
-        en = SECTION_EN.get(s["name"], "")
-        out.append(f'<section id="{slug(s["name"])}"><div class="sh"><h2>{ESC(en)}<span>{ESC(s["name"])}</span></h2></div>')
-        if s["name"] == "股市新手解讀":
-            out.append('<p class="disc">新聞解讀，不是投資建議。</p>')
-        for st in s["stories"]:
-            out.append(f'<article class="story full" id="{slug(st["title"])}">{media(st)}')
-            if st.get("oneliner_real"):
-                out.append(f'<p class="one">{ESC(st["oneliner"])}</p>')
-            body, in_list = [], False
-            for kind, txt in st["paras"]:
-                if kind == "li" and not in_list:
-                    body.append("<ul>"); in_list = True
-                if kind != "li" and in_list:
-                    body.append("</ul>"); in_list = False
-                body.append(f"<li>{inline(txt)}</li>" if kind == "li" else f"<p>{inline(txt)}</p>")
-            if in_list:
-                body.append("</ul>")
-            out.append(f'<div class="body">{"".join(body)}</div>')
-            if st["sources"]:
-                out.append(f'<p class="src"><span>來源</span>{inline(st["sources"])}</p>')
-            for dt in st["details"]:
-                out.append(f'<details><summary>{ESC(plain(dt["title"]))}</summary>'
-                           + "".join(f"<p>{inline(l)}</p>" for l in dt["lines"] if l) + "</details>")
-            out.append("</article>")
-        out.append("</section>")
-    if issue["coverage"]:
-        out.append('<details class="cov"><summary>本期涵蓋與查核</summary>'
-                   + "".join(f"<p>{inline(c)}</p>" for c in issue["coverage"]) + "</details>")
-    nav = []
-    if prev_d:
-        nav.append(f'<a href="../{prev_d}/index.html">← {prev_d}</a>')
-    nav.append('<a href="../archive/index.html">所有期數</a>')
-    if next_d:
-        nav.append(f'<a href="../{next_d}/index.html">{next_d} →</a>')
-    out.append(f'<footer class="pager">{"".join(nav)}</footer></div></body></html>')
+def render_story(issue, s, st):
+    """One story per page; swipe sideways or tap the wordmark to go home."""
+    out = [head(f'{st["title"]} — now—ness', 1), mast(issue["date"], 1, s["name"]), '<article class="story full">', media(st)]
+    if s["name"] == "股市新手解讀":
+        out.append('<p class="disc">新聞解讀，不是投資建議。</p>')
+    if st.get("oneliner_real"):
+        out.append(f'<p class="one">{ESC(st["oneliner"])}</p>')
+    body, in_list = [], False
+    for kind, txt in st["paras"]:
+        if kind == "li" and not in_list:
+            body.append("<ul>"); in_list = True
+        if kind != "li" and in_list:
+            body.append("</ul>"); in_list = False
+        body.append(f"<li>{inline(txt)}</li>" if kind == "li" else f"<p>{inline(txt)}</p>")
+    if in_list:
+        body.append("</ul>")
+    out.append(f'<div class="body">{"".join(body)}</div>')
+    if st["sources"]:
+        out.append(f'<p class="src"><span>來源</span>{inline(st["sources"])}</p>')
+    for dt in st["details"]:
+        out.append(f'<details><summary>{ESC(plain(dt["title"]))}</summary>'
+                   + "".join(f"<p>{inline(l)}</p>" for l in dt["lines"] if l) + "</details>")
+    out.append(f'</article><footer class="pager"><a href="../index.html">← 回首頁</a>'
+               f'<a href="index.html">本期全部</a></footer></div>{SWIPE}</body></html>')
     return "".join(out)
 
 
@@ -289,11 +287,11 @@ def main(nowness, outdir):
             issues.append(it)
     assert issues, "no issues parsed"
     issues.sort(key=lambda x: x["date"], reverse=True)
-    for i, it in enumerate(issues):
-        prev_d = issues[i + 1]["date"] if i + 1 < len(issues) else None
-        next_d = issues[i - 1]["date"] if i > 0 else None
-        write(os.path.join(outdir, it["date"], "index.html"), render_issue(it, prev_d, next_d))
-    write(os.path.join(outdir, "index.html"), render_index(issues[0], len(issues)))
+    for it in issues:
+        write(os.path.join(outdir, it["date"], "index.html"), render_cards(it, 1, len(issues)))
+        for sec, st, n in numbered(it):
+            write(os.path.join(outdir, it["date"], f"{n}.html"), render_story(it, sec, st))
+    write(os.path.join(outdir, "index.html"), render_cards(issues[0], 0, len(issues)))
     write(os.path.join(outdir, "archive", "index.html"), render_archive(issues))
     css = os.path.join(outdir, "style.css")
     if not os.path.exists(css) or not os.path.samefile(os.path.join(HERE, "style.css"), css):

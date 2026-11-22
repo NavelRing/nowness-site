@@ -76,3 +76,6 @@ footer a:not(.mark){min-height:44px;display:inline-flex;align-items:center}
 .pager{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-family:var(--latin)}
 .pager a{text-decoration:none}
 a:focus-visible,summary:focus-visible{outline:1px solid var(--fg);outline-offset:4px}
+.card{display:block;text-decoration:none;margin-bottom:28px}
+.card .blank h3{font-size:28px}
+.short{color:inherit}

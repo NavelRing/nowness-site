@@ -9,11 +9,11 @@ printf '{"date":"2099-01-01","brief":"網站用的一句","items":[{"title":"輝
 python3 "$HERE/build.py" "$T" "$T/out" >/dev/null
 python3 - "$T/out" <<'E'
 import sys; o = sys.argv[1]
-i = open(o + '/index.html').read(); p = open(o + '/2099-01-01/index.html').read()
-assert '網站用的一句' in i and 'JSON一句話' in i and '−14%' in i, 'index text'
+i = open(o + '/index.html').read(); p = open(o + '/2099-01-01/1.html').read()
+assert '網站用的一句' in i and 'JSON一句話' not in i and '−14%' in i and '2099-01-01/1.html' in i, 'index: title+picture only'
 assert 'upload.wikimedia.org/x.jpg' in i and 'CC BY 4.0' in i, 'image + credit'
 assert '新聞解讀，不是投資建議' in i, 'market disclaimer'
 assert p.count('class="one"') == 1 and '第一段內容' not in p and 'DIARY' not in p, 'issue page / privacy filter'
-assert '<details>' in p, 'collapsed notes'
+assert '<details>' in p and 'JSON一句話' in p and 'touchend' in p, 'story page'
 print('selftest ok')
 E
