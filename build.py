@@ -117,13 +117,17 @@ def finish_story(st):
 
 
 def apply_site_json(issue, nowness):
-    p = os.path.join(nowness, "_system", f"site-{issue['date']}.json")
-    if not os.path.exists(p):
-        return
-    try:
-        data = json.load(open(p, encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return
+    """Merge the routine's site json, then hand-picked images/<date>.json in this repo (wins for images)."""
+    for p in (os.path.join(nowness, "_system", f"site-{issue['date']}.json"),
+              os.path.join(HERE, "images", f"{issue['date']}.json")):
+        if os.path.exists(p):
+            try:
+                merge_items(issue, json.load(open(p, encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+
+
+def merge_items(issue, data):
     by = {}
     for it in data.get("items", []):
         for k in (it.get("anchor"), it.get("title")):
@@ -136,7 +140,8 @@ def apply_site_json(issue, nowness):
                 continue
             if it.get("oneliner"):
                 st["oneliner"], st["oneliner_real"] = it["oneliner"], True
-            st["key_number"] = it.get("key_number")
+            if "key_number" in it:
+                st["key_number"] = it["key_number"]
             img = it.get("image")
             if isinstance(img, dict) and str(img.get("url", "")).startswith("https://"):
                 st["image"] = img
@@ -197,7 +202,7 @@ def render_index(issue, total_issues):
             out.append('<p class="disc">新聞解讀，不是投資建議。</p>')
         for i, st in enumerate(s["stories"]):
             link = f'{d}/index.html#{slug(st["title"])}'
-            if i == 0 or st.get("image"):
+            if i == 0:
                 out.append(f'<article class="story">{media(st)}<p class="one">{ESC(st["oneliner"] or "")}</p>'
                            f'<div class="links"><a href="{link}"><u>全文與來源</u></a></div></article>')
             else:
